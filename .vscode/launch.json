@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "swift"
+            ],
+            "args": [],
+            "cwd": "${workspaceFolder:WhisperKit}",
+            "name": "Debug transcribe",
+            "program": "${workspaceFolder:WhisperKit}/.build/debug/transcribe",
+            "preLaunchTask": "swift: Build Debug transcribe"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "swift"
+            ],
+            "args": [],
+            "cwd": "${workspaceFolder:WhisperKit}",
+            "name": "Release transcribe",
+            "program": "${workspaceFolder:WhisperKit}/.build/release/transcribe",
+            "preLaunchTask": "swift: Build Release transcribe"
+        }
+    ]
+}
