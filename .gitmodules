@@ -1,0 +1,4 @@
+[submodule "Dependencies/swift-transformers"]
+	path = Dependencies/swift-transformers
+	url = git@github.com:seb-sep/swift-transformers.git
+	branch = no-deps
