@@ -74,4 +74,6 @@ jobs:
         - name: PR with changes
           run: |
             gh pr create --title "Update WhisperKit to $TAG" --body "Update WhisperKit to $TAG" --base main --head $BRANCH_NAME
+          env:
+            GH_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
           
