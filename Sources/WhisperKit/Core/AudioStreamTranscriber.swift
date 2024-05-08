@@ -3,8 +3,9 @@
 
 import Foundation
 
-extension AudioStreamTranscriber {
-    public struct State {
+@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
+public extension AudioStreamTranscriber {
+    struct State {
         public var isRecording: Bool = false
         public var currentFallbacks: Int = 0
         public var lastBufferSize: Int = 0
@@ -17,28 +18,35 @@ extension AudioStreamTranscriber {
     }
 }
 
+@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
 public typealias AudioStreamTranscriberCallback = (AudioStreamTranscriber.State, AudioStreamTranscriber.State) -> Void
 
 /// Responsible for streaming audio from the microphone, processing it, and transcribing it in real-time.
+@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
 public actor AudioStreamTranscriber {
     private var state: AudioStreamTranscriber.State = .init() {
         didSet {
             stateChangeCallback?(oldValue, state)
         }
     }
+
     private let stateChangeCallback: AudioStreamTranscriberCallback?
 
     private let requiredSegmentsForConfirmation: Int
     private let useVAD: Bool
     private let silenceThreshold: Float
     private let compressionCheckWindow: Int
+    private let transcribeTask: TranscribeTask
     private let audioProcessor: any AudioProcessing
-    private let transcriber: any Transcriber
     private let decodingOptions: DecodingOptions
 
     public init(
+        audioEncoder: any AudioEncoding,
+        featureExtractor: any FeatureExtracting,
+        segmentSeeker: any SegmentSeeking,
+        textDecoder: any TextDecoding,
+        tokenizer: any WhisperTokenizer,
         audioProcessor: any AudioProcessing,
-        transcriber: any Transcriber,
         decodingOptions: DecodingOptions,
         requiredSegmentsForConfirmation: Int = 2,
         silenceThreshold: Float = 0.3,
@@ -46,8 +54,16 @@ public actor AudioStreamTranscriber {
         useVAD: Bool = true,
         stateChangeCallback: AudioStreamTranscriberCallback?
     ) {
+        self.transcribeTask = TranscribeTask(
+            currentTimings: TranscriptionTimings(),
+            progress: Progress(),
+            audioEncoder: audioEncoder,
+            featureExtractor: featureExtractor,
+            segmentSeeker: segmentSeeker,
+            textDecoder: textDecoder,
+            tokenizer: tokenizer
+        )
         self.audioProcessor = audioProcessor
-        self.transcriber = transcriber
         self.decodingOptions = decodingOptions
         self.requiredSegmentsForConfirmation = requiredSegmentsForConfirmation
         self.silenceThreshold = silenceThreshold
@@ -159,9 +175,7 @@ public actor AudioStreamTranscriber {
 
         state.currentText = ""
         state.unconfirmedText = []
-        guard let segments = transcription?.segments else {
-            return
-        }
+        let segments = transcription.segments
 
         // Logic for moving segments to confirmedSegments
         if segments.count > requiredSegmentsForConfirmation {
@@ -190,11 +204,11 @@ public actor AudioStreamTranscriber {
         }
     }
 
-    private func transcribeAudioSamples(_ samples: [Float]) async throws -> TranscriptionResult? {
+    private func transcribeAudioSamples(_ samples: [Float]) async throws -> TranscriptionResult {
         var options = decodingOptions
         options.clipTimestamps = [state.lastConfirmedSegmentEndSeconds]
         let checkWindow = compressionCheckWindow
-        return try await transcriber.transcribe(audioArray: samples, decodeOptions: options) { [weak self] progress in
+        return try await transcribeTask.run(audioArray: samples, decodeOptions: options) { [weak self] progress in
             Task { [weak self] in
                 await self?.onProgressCallback(progress)
             }

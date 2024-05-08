@@ -14,7 +14,7 @@ public protocol AudioEncoding {
     func encodeFeatures(_ features: MLMultiArray) async throws -> MLMultiArray?
 }
 
-@available(macOS 14, iOS 17, watchOS 10, visionOS 1, *)
+@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
 public class AudioEncoder: AudioEncoding, WhisperMLModel {
     public var model: MLModel?
 
@@ -37,21 +37,18 @@ public class AudioEncoder: AudioEncoding, WhisperMLModel {
     public init() {}
 
     public func encodeFeatures(_ features: MLMultiArray) async throws -> MLMultiArray? {
-        // Make sure features is shape MultiArray (Float32 1 × 80,128 × 3000)
-        let modelInputs = AudioEncoderInput(melspectrogram_features: features)
-
-        guard let model = model else {
+        // Make sure features is shape MultiArray (Float32 1 × {80,128} × 3000)
+        guard let model else {
             throw WhisperError.modelsUnavailable()
         }
-
         try Task.checkCancellation()
 
-        let outputFeatures = try await model.prediction(from: modelInputs, options: MLPredictionOptions())
+        let interval = Logging.beginSignpost("EncodeAudio", signposter: Logging.AudioEncoding.signposter)
+        defer { Logging.endSignpost("EncodeAudio", interval: interval, signposter: Logging.AudioEncoding.signposter) }
 
+        let modelInputs = AudioEncoderInput(melspectrogram_features: features)
+        let outputFeatures = try await model.asyncPrediction(from: modelInputs, options: MLPredictionOptions())
         let output = AudioEncoderOutput(features: outputFeatures)
-
-        let encodedFeatures = output.encoder_output_embeds
-
-        return encodedFeatures
+        return output.encoder_output_embeds
     }
 }

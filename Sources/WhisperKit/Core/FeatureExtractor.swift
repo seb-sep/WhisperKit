@@ -12,8 +12,8 @@ public protocol FeatureExtracting {
     func logMelSpectrogram(fromAudio inputAudio: MLMultiArray) async throws -> MLMultiArray?
 }
 
-@available(macOS 14, iOS 17, watchOS 10, visionOS 1, *)
-public class FeatureExtractor: FeatureExtracting, WhisperMLModel {
+@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
+open class FeatureExtractor: FeatureExtracting, WhisperMLModel {
     public var model: MLModel?
 
     public init() {}
@@ -27,20 +27,17 @@ public class FeatureExtractor: FeatureExtracting, WhisperMLModel {
     }
 
     public func logMelSpectrogram(fromAudio inputAudio: MLMultiArray) async throws -> MLMultiArray? {
-        let modelInputs = MelSpectrogramInput(audio: inputAudio)
-
-        guard let model = model else {
-            return nil
+        guard let model else {
+            throw WhisperError.modelsUnavailable()
         }
-
         try Task.checkCancellation()
 
-        let outputFeatures = try await model.prediction(from: modelInputs, options: MLPredictionOptions())
+        let interval = Logging.beginSignpost("ExtractAudioFeatures", signposter: Logging.FeatureExtractor.signposter)
+        defer { Logging.endSignpost("ExtractAudioFeatures", interval: interval, signposter: Logging.FeatureExtractor.signposter) }
 
+        let modelInputs = MelSpectrogramInput(audio: inputAudio)
+        let outputFeatures = try await model.asyncPrediction(from: modelInputs, options: MLPredictionOptions())
         let output = MelSpectrogramOutput(features: outputFeatures)
-
-        let encodedFeatures = output.melspectrogramFeatures
-
-        return encodedFeatures
+        return output.melspectrogramFeatures
     }
 }

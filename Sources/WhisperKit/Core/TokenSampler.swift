@@ -7,7 +7,7 @@ import Foundation
 
 public protocol TokenSampling {
     func update(tokens: [Int], logits: MLMultiArray, logProbs: [Float]) -> SamplingResult
-    func finalize(tokens: [Int], logProbs: [Float]) -> (tokens: [Int], sumLogProbs: Float)
+    func finalize(tokens: [Int], logProbs: [Float]) -> SamplingResult
 }
 
 public struct SamplingResult {
@@ -16,8 +16,8 @@ public struct SamplingResult {
     public var completed: Bool
 }
 
-@available(macOS 14, iOS 17, watchOS 10, visionOS 1, *)
-public class GreedyTokenSampler: TokenSampling {
+@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
+open class GreedyTokenSampler: TokenSampling {
     public var temperature: FloatType
     public var eotToken: Int
     public var decodingOptions: DecodingOptions
@@ -44,7 +44,7 @@ public class GreedyTokenSampler: TokenSampling {
 
             let logitsDescriptor = BNNSNDArrayDescriptor(
                 data: logitsRawPointer,
-                scalarType: FloatType.self, // FIXME: Float16 here breaks in swift 6
+                scalarType: FloatType.self,
                 shape: .vector(logits.count, stride: 1)
             )!
 
@@ -157,18 +157,19 @@ public class GreedyTokenSampler: TokenSampling {
         return SamplingResult(tokens: nextTokens, logProbs: nextLogprobs, completed: completed)
     }
 
-    public func finalize(tokens: [Int], logProbs: [Float]) -> (tokens: [Int], sumLogProbs: Float) {
+    public func finalize(tokens: [Int], logProbs: [Float]) -> SamplingResult {
         var finalTokens = tokens
+        var finalLogProbs = logProbs
         if tokens.last != eotToken {
             finalTokens.append(eotToken)
+            finalLogProbs.append(0)
         }
 
-        let sumLogProbs = logProbs.reduce(0, +)
-        return (tokens: finalTokens, sumLogProbs: sumLogProbs)
+        return SamplingResult(tokens: finalTokens, logProbs: finalLogProbs, completed: true)
     }
 }
 
-public class BeamSearchTokenSampler: TokenSampling {
+open class BeamSearchTokenSampler: TokenSampling {
     public var beamSize: Int
     public var eotToken: Int
     public var patience: Float
@@ -200,7 +201,7 @@ public class BeamSearchTokenSampler: TokenSampling {
         fatalError("Not implemented: \(#function)")
     }
 
-    public func finalize(tokens: [Int], logProbs: [Float]) -> (tokens: [Int], sumLogProbs: Float) {
+    public func finalize(tokens: [Int], logProbs: [Float]) -> SamplingResult {
         // TODO: Implement
         fatalError("Not implemented: \(#function)")
     }

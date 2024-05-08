@@ -73,7 +73,7 @@ struct WhisperAXWatchView: View {
 
     var body: some View {
         NavigationSplitView {
-            if WhisperKit.deviceName().hasPrefix("Watch7") {
+            if WhisperKit.deviceName().hasPrefix("Watch7") || WhisperKit.isRunningOnSimulator {
                 modelSelectorView
                     .navigationTitle("WhisperAX")
                     .navigationBarTitleDisplayMode(.automatic)
@@ -249,7 +249,8 @@ struct WhisperAXWatchView: View {
                 let currentTranscription = (confirmedSegments.map { $0.text } + unconfirmedSegments.map { $0.text }).joined(separator: " ")
                 ShareLink(item: currentTranscription, label: {
                     Image(systemName: "square.and.arrow.up")
-                })            }
+                })
+            }
             ToolbarItem(placement: .bottomBar) {
                 Button {
                     withAnimation {
@@ -350,8 +351,6 @@ struct WhisperAXWatchView: View {
                 return
             }
 
-            let recommended = WhisperKit.recommendedModels()
-
             var folder: URL?
 
             // Check if the model is available locally
@@ -359,7 +358,7 @@ struct WhisperAXWatchView: View {
                 // Get local model folder URL from localModels
                 // TODO: Make this configurable in the UI
                 // TODO: Handle incomplete downloads
-                folder = URL(fileURLWithPath: localModelPath).appendingPathComponent("openai_whisper-\(model)")
+                folder = URL(fileURLWithPath: localModelPath).appendingPathComponent(model)
             } else {
                 // Download the model
                 folder = try await WhisperKit.download(variant: model, from: repoName, progressCallback: { progress in
@@ -409,7 +408,7 @@ struct WhisperAXWatchView: View {
                 try await whisperKit.loadModels()
 
                 await MainActor.run {
-                    availableLanguages = whisperKit.tokenizer?.langauges.map { $0.key }.sorted() ?? ["english"]
+                    availableLanguages = Constants.languages.map { $0.key }.sorted()
                     loadingProgressValue = 1.0
                     modelState = whisperKit.modelState
                 }
@@ -491,7 +490,7 @@ struct WhisperAXWatchView: View {
     func transcribeAudioSamples(_ samples: [Float]) async throws -> TranscriptionResult? {
         guard let whisperKit = whisperKit else { return nil }
 
-        let languageCode = whisperKit.tokenizer?.langauges[selectedLanguage] ?? "en"
+        let languageCode = Constants.languages[selectedLanguage, default: Constants.defaultLanguageCode]
         let task: DecodingTask = selectedTask == "transcribe" ? .transcribe : .translate
         let seekClip = [lastConfirmedSegmentEndSeconds]
 
@@ -536,8 +535,12 @@ struct WhisperAXWatchView: View {
             return nil
         }
 
-        let transcription = try await whisperKit.transcribe(audioArray: samples, decodeOptions: options, callback: decodingCallback)
-        return transcription
+        let transcription: [TranscriptionResult] = try await whisperKit.transcribe(
+            audioArray: samples,
+            decodeOptions: options,
+            callback: decodingCallback
+        )
+        return transcription.first
     }
 
     // MARK: Streaming Logic
