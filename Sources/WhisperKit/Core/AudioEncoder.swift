@@ -1,7 +1,11 @@
 //  For licensing see accompanying LICENSE.md file.
 //  Copyright © 2024 Argmax, Inc. All rights reserved.
 
+import ArgmaxCore
 import CoreML
+
+public protocol AudioEncoderOutputType {}
+extension MLMultiArray: AudioEncoderOutputType {}
 
 /// AudioEncoding protocol defines the requirements for an audio encoding implementation.
 public protocol AudioEncoding {
@@ -10,13 +14,13 @@ public protocol AudioEncoding {
 
     /// Encodes the given audio features asynchronously.
     /// - Parameter features: The audio features to be encoded.
-    /// - Returns: An optional `MLMultiArray` containing the encoded features.
-    func encodeFeatures(_ features: MLMultiArray) async throws -> MLMultiArray?
+    /// - Returns: An optional tensor containing the encoded features.
+    func encodeFeatures(_ features: any FeatureExtractorOutputType) async throws -> (any AudioEncoderOutputType)?
 }
 
-@available(macOS 13, iOS 16, watchOS 10, visionOS 1, *)
+/// Backwards-compatible AudioEncoder implementation
 public class AudioEncoder: AudioEncoding, WhisperMLModel {
-    public var model: MLModel?
+    @Protected public var model: MLModel?
 
     public var embedSize: Int? {
         guard let inputDescription = model?.modelDescription.outputDescriptionsByName["encoder_output_embeds"] else { return nil }
@@ -36,8 +40,15 @@ public class AudioEncoder: AudioEncoding, WhisperMLModel {
 
     public init() {}
 
+    public func encodeFeatures(_ features: any FeatureExtractorOutputType) async throws -> (any AudioEncoderOutputType)? {
+        guard let features = features as? MLMultiArray else {
+            throw WhisperError.audioProcessingFailed("AudioEncoder input must be MLMultiArray")
+        }
+
+        return try await encodeFeatures(features)
+    }
+
     public func encodeFeatures(_ features: MLMultiArray) async throws -> MLMultiArray? {
-        // Make sure features is shape MultiArray (Float32 1 × {80,128} × 3000)
         guard let model else {
             throw WhisperError.modelsUnavailable()
         }

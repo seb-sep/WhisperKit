@@ -23,7 +23,6 @@ struct WhisperAXWatchView: View {
     @AppStorage("repoName") private var repoName: String = "argmaxinc/whisperkit-coreml"
     @AppStorage("enableTimestamps") private var enableTimestamps: Bool = false
     @AppStorage("enablePromptPrefill") private var enablePromptPrefill: Bool = true
-    @AppStorage("enableCachePrefill") private var enableCachePrefill: Bool = true
     @AppStorage("enableSpecialCharacters") private var enableSpecialCharacters: Bool = false
     @AppStorage("enableEagerDecoder") private var enableEagerDecoder: Bool = false
     @AppStorage("temperatureStart") private var temperatureStart: Double = 0
@@ -312,7 +311,7 @@ struct WhisperAXWatchView: View {
             }
         }
 
-        localModels = WhisperKit.formatModelFiles(localModels)
+        localModels = ModelUtilities.formatModelFiles(localModels)
         for model in localModels {
             if !availableModels.contains(model),
                !disabledModels.contains(model)
@@ -340,13 +339,13 @@ struct WhisperAXWatchView: View {
 
         whisperKit = nil
         Task {
-            whisperKit = try await WhisperKit(
-                verbose: true,
-                logLevel: .debug,
-                prewarm: false,
-                load: false,
-                download: false
-            )
+            let config = WhisperKitConfig(verbose: true,
+                                          logLevel: .debug,
+                                          prewarm: false,
+                                          load: false,
+                                          download: false)
+
+            whisperKit = try await WhisperKit(config)
             guard let whisperKit = whisperKit else {
                 return
             }
@@ -505,7 +504,7 @@ struct WhisperAXWatchView: View {
         )
 
         // Early stopping checks
-        let decodingCallback: ((TranscriptionProgress) -> Bool?) = { progress in
+        let decodingCallback: TranscriptionCallback = { progress in
             DispatchQueue.main.async {
                 let fallbacks = Int(progress.timings.totalDecodingFallbacks)
                 if progress.text.count < currentText.count {
@@ -523,7 +522,7 @@ struct WhisperAXWatchView: View {
             let checkWindow = Int(compressionCheckWindow)
             if currentTokens.count > checkWindow {
                 let checkTokens: [Int] = currentTokens.suffix(checkWindow)
-                let compressionRatio = compressionRatio(of: checkTokens)
+                let compressionRatio = TextUtilities.compressionRatio(of: checkTokens)
                 if compressionRatio > options.compressionRatioThreshold! {
                     return false
                 }
@@ -580,24 +579,11 @@ struct WhisperAXWatchView: View {
         }
 
         if useVAD {
-            // Retrieve the current relative energy values from the audio processor
-            let currentRelativeEnergy = whisperKit.audioProcessor.relativeEnergy
-
-            // Calculate the number of energy values to consider based on the duration of the next buffer
-            // Each energy value corresponds to 1 buffer length (100ms of audio), hence we divide by 0.1
-            let energyValuesToConsider = Int(nextBufferSeconds / 0.1)
-
-            // Extract the relevant portion of energy values from the currentRelativeEnergy array
-            let nextBufferEnergies = currentRelativeEnergy.suffix(energyValuesToConsider)
-
-            // Determine the number of energy values to check for voice presence
-            // Considering up to the last 1 second of audio, which translates to 10 energy values
-            let numberOfValuesToCheck = max(10, nextBufferEnergies.count - 10)
-
-            // Check if any of the energy values in the considered range exceed the silence threshold
-            // This indicates the presence of voice in the buffer
-            let voiceDetected = nextBufferEnergies.prefix(numberOfValuesToCheck).contains { $0 > Float(silenceThreshold) }
-
+            let voiceDetected = AudioProcessor.isVoiceDetected(
+                in: whisperKit.audioProcessor.relativeEnergy,
+                nextBufferInSeconds: nextBufferSeconds,
+                silenceThreshold: Float(silenceThreshold)
+            )
             // Only run the transcribe if the next buffer has voice
             guard voiceDetected else {
                 await MainActor.run {

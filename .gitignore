@@ -1,6 +1,7 @@
 .DS_Store
 /.build
 /Packages
+.vscode/
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json
@@ -23,6 +24,10 @@ Models
 **/*.mp3
 **/*.m4a
 **/*.flac
+
+# Swift Client build artifacts
+Examples/ServeCLIClient/Swift/.build
+Examples/ServeCLIClient/Swift/.swiftpm
 
 ## Xcode
 # Build generated
@@ -56,10 +61,20 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots
 fastlane/test_output
+fastlane/benchmark_data
+fastlane/upload_folder
 
 ### Xcode Patch ###
+**/*.xcconfig
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/
 !*.xcworkspace/contents.xcworkspacedata
 /*.gcno
+
+# Swift build artifacts
+*.d
+*.o
+*.swiftdeps
+*.swiftmodule
+*.swiftdoc
